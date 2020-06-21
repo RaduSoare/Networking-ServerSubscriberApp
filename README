@@ -1,0 +1,93 @@
+Student: Soare Radu-Georgian
+Grupa: 323 CD
+Tema2 - PC
+
+/* SERVER */
+- Se creeaza socketii UDP si TCP si se completeaza structurile aferente
+fiecarui protocol
+Rularea serverului se imparte in 4 cazuri:
+1. Comanda primita de la STDIN:
+- orice comanda in afara de cea de "exit" este ignorata, iar dupa exit se
+inchid toti socketii inca deschisi
+2. Primire mesaj UDP:
+- mesajul primit intr-un buffer este castat intr-o structura de tip UDPmessage
+care retine topicul, tipul de date si content-ul mesajului inca neprelucrat.
+- in functie de tipul de date contentul se prelucreza dupa regulile din cerinta,
+apoi este construit un mesaj de tip TCPmessage care retine datele din mesajul
+UDP +  portul si adresa ip.
+- se trimite mesajul UDP tuturor clientilor abonati la topicul corespunzator, cu
+mentiunea ca daca un client este offline si abonat cu sf=1, mesajul nu este trimis,
+ci este salvat intr-un vector, iar atunci cand urmeaza sa se conecteze o sa
+primeasca mesajul.
+3. Cerere noua de conexiune de la un client TCP
+- se accepta conexiunea, se creeaza un nou socket TCP
+- se primeste ID-ul clientului ce doreste sa se conecteze si se face validarea
+acestuia: daca mai exista un client cu acelasi ID si este online, conectarea
+celui de-al doilea o sa fie refuzata, iar daca nu este online, se va updata
+socketul pe care facuse conexiunea initial.
+- daca i s-a acceptat conexiunea, se afiseaza mesajul de conectare cu succes, altfel
+se transmite refuzul catre client
+- dupa acceptarea conexiunii, daca clientul a mai fost conectat, primeste
+mesajele trimise cat a fost offline daca s-a trimis vreun mesaj pe topicurile
+la care era abonat cu sf=1
+- dupa trimiterea mesajelor vechi, acestea sunt sterse din lista
+4. Comanda de la client TCP
+- daca serverul nu primeste niciun mesaj de la client, se incheie conexiunea cu
+acesta, clientul este trecut ca offline si se elimina socketul pe care
+acesta era conectat
+- orice comanda in afara de subscribe si unsubscribe este ignorata
+- daca se primeste o comanda valida de subscribe:
+-- daca topicul nu exista, atunci se creeaza
+-- clientul este lasat sa schimbe flag-ul sf
+-- daca incearca sa se aboneze la un topic la care deja este abonat, se
+refuza actiunea
+-- daca nu era abonat deja, atunci se introduc descriptorul si sf-ul din comanda
+TCP in lista cu clientii abonati la topicul respectiv
+- daca se primeste o comanda valida de unsubscribe:
+-- daca topicul nu exista se intoarce cod de eroare
+-- daca clientul nu este abonat la topic se intoarce cod de eroare
+-- daca topicul exista si clientul este abonat, datele acestuia sunt scoase din
+lista cu abonatii topicului
+
+/* SUBSCRIBER */
+- se creeaza un socket tcp si se completeaza structura corespunzatoare
+- se conecteaza la server pe portul si ip-ul primit ca argumente la rulare
+- se trimite id-ul catre server pentru validare
+Se disting 2 cazuri:
+1. Comanda primita de STDIN
+- daca se primeste comanda exit, clientul se inchide (devine offline).
+- daca se primeste o comanda de subscribe/ unsubscribe aceasta este parsata
+si se completeaza o structura de tipul Command care retine tipul comenzii,
+topicul pentru care se realizeaza comanda si sf-ul. In cazul comenzii de subscribe
+sf este completat cu cel primit ca input, iar in cazul comenzii de unsubscribe,
+se completeaza cu -1 pentru a se sugera ca pentru aceasta comanda campul este
+irelevant
+- nu se accepta nicio alta comanda in afara de subscribe si unsubscribe sau
+o comanda cu sf diferit de {0 si 1}
+- nu se accepta nici comenzi de tipul unsubscribe topic <string>
+- se trimite comanda catre server si se asteapta validarea acesteia
+- daca comanda a primit mesaj de validare de la server se afiseaza mesajul
+de comanda finalizata cu succes
+2. Mesaj UDP de la server
+- mesajul este castat la o structura TCPmessage care contine campurile pentru
+afisare mesajului
+- se afiseaza mesajul
+- la inchiderea clientului, se inchide socketul pe care se facuse conexiunea
+
+Detalii suplimentare:
+- in implementare am considerat necesare anumite mesaje de eroare, insa am
+lasat ca active doar mesajele de eroare ale functiilor pe soketi (send, recv etc.)
+- restul mesajelor le-am pastrat in cod pentru o viitoare extindere a acestuia sau
+pentru corectarea mai usoara a temei, insa le-am lasat comentate in caz ca va fi
+nevoie de ele
+
+- in implementare am folosit ca structuri de date unordered_map datorita
+proprietatii de a cauta in O(1) si vector pentru usurarea actiunilor
+de insert si delete deoarece acestea sunt foarte frecvente
+* un unordered_map a fost folosit pentru a retine numele topicurilor si un
+vector de Subscribers care contine socketul si sf-ul unui client abonat la topic
+* alt unordered_map a fost folosit pentru a retine mesajele ce trebuie trimise
+la conectarea unui client, deci retine descriptorul userului si un vector de
+mesaje TCP ce trebuie sa fie trimise
+* vector de Client* care sa retine datele userilor care s-au conectat
+pe parcursul rularii serverului.
